@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+
+import re
+
+import roslib
+import rospy
+import rosnode
+import time
+
+from std_msgs.msg import String
+
+roslib.load_manifest('node_alive')
+
+nodes = []
+
+def callback(data):
+	nodes.append(data.data)
+
+# Main function.
+if __name__ == '__main__':
+	rospy.init_node('node_alive_server')
+
+	rospy.Subscriber("check_alive_nodes", String, callback)
+
+	re_node = re.compile('[^/]+$')
+
+	while not rospy.is_shutdown():
+		print "Pinging ..."
+		alive_nodes = []
+		for alive_node in rosnode.rosnode_ping_all()[0]:
+			alive_nodes.append(re_node.search(alive_node).group(0))
+		
+		for node in nodes:
+			alive = node in alive_nodes
+			print '%s\t%s'%(alive,node)
+
+		rospy.sleep(1)
