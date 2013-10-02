@@ -86,6 +86,6 @@ if __name__ == '__main__':
 		# Publish diagnostic array
 		pub.publish(diagnosticArray)
 
-		rospy.sleep(1)
+		rospy.sleep(5)
 
 		seq+=1
