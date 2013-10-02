@@ -6,32 +6,86 @@ import roslib
 import rospy
 import rosnode
 import time
+import diagnostic_msgs.msg
 
 from std_msgs.msg import String
+
+import sys, os
+null = open(os.devnull,'wb')
+_stderr = sys.stderr
+_stdout = sys.stdout
 
 roslib.load_manifest('node_alive')
 
 nodes = []
+seen_nodes = []
 
 def callback(data):
-	nodes.append(data.data)
+	if data.data not in nodes:
+		rospy.loginfo("Added '%s' to node_alive_server"%data.data)
+		nodes.append(data.data)
 
 # Main function.
 if __name__ == '__main__':
 	rospy.init_node('node_alive_server')
 
 	rospy.Subscriber("check_alive_nodes", String, callback)
+	pub = rospy.Publisher('diagnostics_agg', diagnostic_msgs.msg.DiagnosticArray)
 
-	re_node = re.compile('[^/]+$')
+	seq = 1
 
 	while not rospy.is_shutdown():
-		print "Pinging ..."
+		diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
+		diagnosticArray.header.stamp = rospy.get_rostime()
+		diagnosticArray.header.seq = seq
+
+		listed_nodes = rosnode.get_node_names()
+		for listed_node in listed_nodes:
+			if listed_node not in nodes:
+				rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
+				nodes.append(listed_node)
+			if listed_node not in seen_nodes:
+				seen_nodes.append(listed_node)
+		
 		alive_nodes = []
+		
+		# Do not play output from ping_all
+		sys.stdout = sys.stderr = null
 		for alive_node in rosnode.rosnode_ping_all()[0]:
-			alive_nodes.append(re_node.search(alive_node).group(0))
+			alive_nodes.append(alive_node)
+		
+		# Restore output
+		sys.stderr = _stderr
+		sys.stdout = _stdout
 		
 		for node in nodes:
-			alive = node in alive_nodes
-			print '%s\t%s'%(alive,node)
+
+			# Create diagnostic mesasge
+			statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
+			statusMsg.name = node
+
+			# Determine node status
+			if node in alive_nodes:
+				statusMsg.level = 0 # 1. Node is alive --> Status OK
+				statusMsg.message = "Node '%s' is alive"%node
+			else:
+				if node not in listed_nodes:
+					if node in seen_nodes:
+						nodes.remove(node) # 2. Node has been cleanly removed 
+						rospy.loginfo("Removed '%s' from node_alive_server"%node)
+						continue
+					else:
+						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
+						statusMsg.message = "Node '%s' did not start"%node
+				else:
+					statusMsg.level = 2 # 4. Node crashed --> Status ERROR
+					statusMsg.message = "Node '%s' is dead"%node
+
+			diagnosticArray.status.append(statusMsg)
+
+		# Publish diagnostic array
+		pub.publish(diagnosticArray)
 
 		rospy.sleep(1)
+
+		seq+=1

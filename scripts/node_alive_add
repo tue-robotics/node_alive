@@ -9,7 +9,6 @@ import os
 from optparse import OptionParser
 import rosnode
 import time
-import re
 
 import roslib
 import rospy
@@ -24,14 +23,14 @@ def get_node_names(roslaunch_files):
 
 	node_names = []
 	for node in config.nodes:
-		node_names.append(node.name)
+		node_names.append(node.namespace + node.name)
 	return node_names
 
 # Main function.
 if __name__ == '__main__':
 	rospy.init_node('node_alive_add')
 
-	parser = OptionParser(usage="usage: \tget_node_names [roslaunch_file]")
+	parser = OptionParser(usage="usage: \t node_alive_add [roslaunch_file]")
 
 	options, args = parser.parse_args()
 	if not args:
@@ -40,5 +39,6 @@ if __name__ == '__main__':
 	pub = rospy.Publisher('check_alive_nodes', String)
 
 	for node in get_node_names([args[0]]):	
-		pub.publish(str(node))
-		rospy.loginfo("Added '%s' to node_alive_server"%node)
+		if node[-4:] != "_tmp":
+			pub.publish(node)
+			rospy.loginfo("Adding '%s' to node_alive_server"%node)
