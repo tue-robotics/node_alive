@@ -30,7 +30,7 @@ if __name__ == '__main__':
 	rospy.init_node('node_alive_server')
 
 	rospy.Subscriber("check_alive_nodes", String, callback)
-	pub = rospy.Publisher('diagnostics_agg', diagnostic_msgs.msg.DiagnosticArray)
+	pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
 
 	seq = 1
 
@@ -51,23 +51,26 @@ if __name__ == '__main__':
 		
 		# Do not play output from ping_all
 		sys.stdout = sys.stderr = null
-		for alive_node in rosnode.rosnode_ping_all()[0]:
-			alive_nodes.append(alive_node)
-		
+
+		ping_nodes = rosnode.rosnode_ping_all()[0]
+
 		# Restore output
 		sys.stderr = _stderr
 		sys.stdout = _stdout
+		
+		for alive_node in ping_nodes:
+			alive_nodes.append(alive_node)
 		
 		for node in nodes:
 
 			# Create diagnostic mesasge
 			statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
-			statusMsg.name = node
+			statusMsg.name = "node_alive%s"%node
 
 			# Determine node status
 			if node in alive_nodes:
 				statusMsg.level = 0 # 1. Node is alive --> Status OK
-				statusMsg.message = "Node '%s' is alive"%node
+				statusMsg.message = "is alive"
 			else:
 				if node not in listed_nodes:
 					if node in seen_nodes:
@@ -76,10 +79,10 @@ if __name__ == '__main__':
 						continue
 					else:
 						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
-						statusMsg.message = "Node '%s' did not start"%node
+						statusMsg.message = "did not start"
 				else:
 					statusMsg.level = 2 # 4. Node crashed --> Status ERROR
-					statusMsg.message = "Node '%s' is dead"%node
+					statusMsg.message = "is dead"
 
 			diagnosticArray.status.append(statusMsg)
 
