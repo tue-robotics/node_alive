@@ -11,6 +11,7 @@ from std_msgs.msg import String
 import subprocess as sub
 import sys
 import os
+import fnmatch
 
 re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 NULL = NULL = open(os.devnull, 'w')
@@ -25,8 +26,14 @@ except:
 nodes = []
 seen_nodes = []
 
+def neglectNode(node_name):
+	for neglect_node in neglect_nodes:
+		if fnmatch.fnmatch(node_name,neglect_node):
+			return True
+	return False
+
 def callback(data):
-	if data.data not in nodes and data.data not in neglect_nodes:
+	if data.data not in nodes and not neglectNode(data.data):
 		rospy.loginfo("Added '%s' to node_alive_server"%data.data)
 		nodes.append(data.data)
 
@@ -46,7 +53,7 @@ if __name__ == '__main__':
 
 		listed_nodes = rosnode.get_node_names()
 		for listed_node in listed_nodes:
-			if listed_node not in nodes and listed_node not in neglect_nodes:
+			if listed_node not in nodes and not neglectNode(listed_node):
 				rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
 				nodes.append(listed_node)
 			if listed_node not in seen_nodes:
