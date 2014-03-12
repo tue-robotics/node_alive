@@ -1,32 +1,32 @@
 #!/usr/bin/env python
 
-import re
-
-import roslib
+import roslib; roslib.load_manifest('node_alive')
 import rospy
 import rosnode
 import diagnostic_msgs.msg
 from std_msgs.msg import String
 import subprocess as sub
 import os
+import re
 import fnmatch
-
-roslib.load_manifest('node_alive')
 
 class NodeAliveServer():
 
+	nodes = []
+	seen_nodes = []
+	neglect_nodes = []
+
+	re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
+	NULL = open(os.devnull, 'w')
+
 	def __init__(self):
-
-		self.re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
-		self.NULL = open(os.devnull, 'w')
-
 		try:
 			self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
 		except:
 			self.neglect_nodes = []
 
-		self.nodes = []
-		self.seen_nodes = []
+		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
+		self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
 
 	def neglectNode(self, node_name):
 		for neglect_node in self.neglect_nodes:
@@ -102,8 +102,4 @@ if __name__ == '__main__':
 	rospy.init_node('node_alive_server')
 
 	server = NodeAliveServer()
-
-	rospy.Subscriber("check_alive_nodes", String, server.callback)
-	server.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
-
 	server.loop()
