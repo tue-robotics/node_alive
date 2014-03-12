@@ -5,97 +5,105 @@ import re
 import roslib
 import rospy
 import rosnode
-import time
 import diagnostic_msgs.msg
 from std_msgs.msg import String
 import subprocess as sub
-import sys
 import os
 import fnmatch
 
-re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
-NULL = NULL = open(os.devnull, 'w')
-
 roslib.load_manifest('node_alive')
 
-try:
-	neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
-except:
-	neglect_nodes = []
+class NodeAliveServer():
 
-nodes = []
-seen_nodes = []
+	def __init__(self):
 
-def neglectNode(node_name):
-	for neglect_node in neglect_nodes:
-		if fnmatch.fnmatch(node_name,neglect_node):
-			return True
-	return False
+		self.re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
+		self.NULL = open(os.devnull, 'w')
 
-def callback(data):
-	if data.data not in nodes and not neglectNode(data.data):
-		rospy.loginfo("Added '%s' to node_alive_server"%data.data)
-		nodes.append(data.data)
+		try:
+			self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
+		except:
+			self.neglect_nodes = []
+
+		self.nodes = []
+		self.seen_nodes = []
+
+	def neglectNode(self, node_name):
+		for neglect_node in self.neglect_nodes:
+			if fnmatch.fnmatch(node_name,neglect_node):
+				return True
+		return False
+
+	def callback(self, data):
+		if data.data not in self.nodes and not self.neglectNode(data.data):
+			rospy.loginfo("Added '%s' to node_alive_server"%data.data)
+			self.nodes.append(data.data)
+
+	def loop(self):
+
+		seq = 1
+
+		while not rospy.is_shutdown():
+			diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
+			diagnosticArray.header.stamp = rospy.get_rostime()
+			diagnosticArray.header.seq = seq
+
+			self.listed_nodes = rosnode.get_node_names()
+			for listed_node in self.listed_nodes:
+				if listed_node not in self.nodes and not self.neglectNode(listed_node):
+					rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
+					self.nodes.append(listed_node)
+				if listed_node not in self.seen_nodes:
+					self.seen_nodes.append(listed_node)
+			
+			self.alive_nodes = []
+
+			response = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
+			self.ping_nodes = self.re_ping_node.findall(response.stdout.read())
+
+			for alive_node in self.ping_nodes:
+				self.alive_nodes.append(alive_node)
+
+			for node in self.nodes:
+
+				# Create diagnostic mesasge
+				statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
+				statusMsg.name = "node_alive%s"%node
+
+				# Determine node status
+				if node in self.alive_nodes:
+					statusMsg.level = 0 # 1. Node is alive --> Status OK
+					statusMsg.message = "is alive"
+				else:
+					if node not in self.listed_nodes:
+						if node in self.seen_nodes:
+							self.nodes.remove(node) 
+							rospy.loginfo("Removed '%s' from node_alive_server"%node)
+							statusMsg.level = 0 # 2. Node has been cleanly removed 
+							statusMsg.message = "cleanly removed"
+						else:
+							statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
+							statusMsg.message = "did not start"
+					else:
+						statusMsg.level = 2 # 4. Node crashed --> Status ERROR
+						statusMsg.message = "is dead"
+
+				diagnosticArray.status.append(statusMsg)
+
+			# Publish diagnostic array
+			self.pub.publish(diagnosticArray)
+
+			rospy.sleep(5)
+
+			seq+=1
 
 # Main function.
 if __name__ == '__main__':
 	rospy.init_node('node_alive_server')
 
-	rospy.Subscriber("check_alive_nodes", String, callback)
-	pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
+	server = NodeAliveServer()
 
-	seq = 1
+	rospy.Subscriber("check_alive_nodes", String, server.callback)
+	server.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
 
-	while not rospy.is_shutdown():
-		diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
-		diagnosticArray.header.stamp = rospy.get_rostime()
-		diagnosticArray.header.seq = seq
-
-		listed_nodes = rosnode.get_node_names()
-		for listed_node in listed_nodes:
-			if listed_node not in nodes and not neglectNode(listed_node):
-				rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
-				nodes.append(listed_node)
-			if listed_node not in seen_nodes:
-				seen_nodes.append(listed_node)
-		
-		alive_nodes = []
-
-		response = sub.Popen(['rosnode','ping','-a'],stderr=NULL,stdout=sub.PIPE)
-		ping_nodes = re_ping_node.findall(response.stdout.read())
-
-		for alive_node in ping_nodes:
-			alive_nodes.append(alive_node)
-
-		for node in nodes:
-
-			# Create diagnostic mesasge
-			statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
-			statusMsg.name = "node_alive%s"%node
-
-			# Determine node status
-			if node in alive_nodes:
-				statusMsg.level = 0 # 1. Node is alive --> Status OK
-				statusMsg.message = "is alive"
-			else:
-				if node not in listed_nodes:
-					if node in seen_nodes:
-						nodes.remove(node) 
-						rospy.loginfo("Removed '%s' from node_alive_server"%node)
-						statusMsg.level = 0 # 2. Node has been cleanly removed 
-						statusMsg.message = "cleanly removed"
-					else:
-						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
-						statusMsg.message = "did not start"
-				else:
-					statusMsg.level = 2 # 4. Node crashed --> Status ERROR
-					statusMsg.message = "is dead"
-
-			diagnosticArray.status.append(statusMsg)
-
-		# Publish diagnostic array
-		pub.publish(diagnosticArray)
-
-		rospy.sleep(5)
-
-		seq+=1
+	server.loop()
