@@ -5,6 +5,7 @@ import rospy
 import rosnode
 import diagnostic_msgs.msg
 from std_msgs.msg import String
+import node_alive.srv
 import subprocess as sub
 import os
 import re
@@ -33,6 +34,7 @@ class NodeAliveServer():
 
 		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
 		self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
+		self.srv = rospy.Service('get_alive_nodes', node_alive.srv.ListNodesAlive, self.service_callback)
 
 	def isNeglectedNode(self, node_name):
 		for neglect_node in self.neglect_nodes:
@@ -44,6 +46,16 @@ class NodeAliveServer():
 		if data.data not in self.tracked_nodes and not self.isNeglectedNode(data.data):
 			rospy.loginfo("Added '%s' to node_alive_server"%data.data)
 			self.tracked_nodes.append(data.data)
+
+	def service_callback(self, req):
+		rospy.loginfo("get_alive_nodes call")
+
+		return node_alive.srv.ListNodesAliveResponse(
+			tracked_nodes	= len(self.tracked_nodes),
+			seen_nodes		= len(self.seen_nodes),
+			alive_nodes 	= len(self.alive_nodes),
+			listed_nodes 	= len(self.listed_nodes),
+		)
 
 	def update_nodes(self):
 		# first update the listed nodes by the ros master
@@ -64,7 +76,7 @@ class NodeAliveServer():
 		for alive_node in ping_nodes:
 			self.alive_nodes.append(alive_node)
 
-	def generate_diagnostic_msgs(self):
+	def generate_diagnostic_array(self):
 		diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
 		diagnosticArray.header.stamp = rospy.get_rostime()
 
@@ -104,7 +116,7 @@ class NodeAliveServer():
 
 			self.update_nodes()
 			
-			diagnosticArray = self.generate_diagnostic_msgs()
+			diagnosticArray = self.generate_diagnostic_array()
 			diagnosticArray.header.seq = seq
 			seq += 1
 

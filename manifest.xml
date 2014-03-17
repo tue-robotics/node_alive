@@ -8,10 +8,7 @@
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/node_alive</url>
+  
   <depend package="rospy"/>
-  <build_depend>message_generation</build_depend>
-  <run_depend>message_runtime</run_depend>
-
+  <depend package="diagnostic_msgs"/>
 </package>
-
-
