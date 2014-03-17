@@ -46,66 +46,71 @@ class NodeAliveServer():
 			self.tracked_nodes.append(data.data)
 
 	def update_nodes(self):
+		# first update the listed nodes by the ros master
+		self.listed_nodes = rosnode.get_node_names()
+		for listed_node in self.listed_nodes:
+			if listed_node not in self.tracked_nodes and not self.isNeglectedNode(listed_node):
+				rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
+				self.tracked_nodes.append(listed_node)
+			if listed_node not in self.seen_nodes:
+				self.seen_nodes.append(listed_node)
+
+		# then ping all nodes and check if they're online
 		self.alive_nodes = []
 
 		response = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
-		self.ping_nodes = self.re_ping_node.findall(response.stdout.read())
+		ping_nodes = self.re_ping_node.findall(response.stdout.read())
 
-		for alive_node in self.ping_nodes:
+		for alive_node in ping_nodes:
 			self.alive_nodes.append(alive_node)
 
+	def generate_diagnostic_msgs(self):
+		diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
+		diagnosticArray.header.stamp = rospy.get_rostime()
+
+		for tracked_node in self.tracked_nodes:
+
+			# Create diagnostic mesasge
+			statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
+			statusMsg.name = "node_alive%s" % tracked_node
+
+			# Determine node status
+			if tracked_node in self.alive_nodes:
+				statusMsg.level = 0 # 1. Node is alive --> Status OK
+				statusMsg.message = "is alive"
+			else:
+				if tracked_node not in self.listed_nodes:
+					if tracked_node in self.seen_nodes:
+						self.tracked_nodes.remove(tracked_node) 
+						rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
+						statusMsg.level = 0 # 2. Node has been cleanly removed 
+						statusMsg.message = "cleanly removed"
+					else:
+						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
+						statusMsg.message = "did not start"
+				else:
+					statusMsg.level = 2 # 4. Node crashed --> Status ERROR
+					statusMsg.message = "is dead"
+
+			diagnosticArray.status.append(statusMsg)
+
+		return diagnosticArray
 
 	def loop(self):
 
 		seq = 1
 
 		while not rospy.is_shutdown():
-			diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
-			diagnosticArray.header.stamp = rospy.get_rostime()
-			diagnosticArray.header.seq = seq
 
-			self.listed_nodes = rosnode.get_node_names()
-			for listed_node in self.listed_nodes:
-				if listed_node not in self.tracked_nodes and not self.isNeglectedNode(listed_node):
-					rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
-					self.tracked_nodes.append(listed_node)
-				if listed_node not in self.seen_nodes:
-					self.seen_nodes.append(listed_node)
-			
 			self.update_nodes()
+			
+			diagnosticArray = self.generate_diagnostic_msgs()
+			diagnosticArray.header.seq = seq
+			seq += 1
 
-			for tracked_node in self.tracked_nodes:
-
-				# Create diagnostic mesasge
-				statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
-				statusMsg.name = "node_alive%s" % tracked_node
-
-				# Determine node status
-				if tracked_node in self.alive_nodes:
-					statusMsg.level = 0 # 1. Node is alive --> Status OK
-					statusMsg.message = "is alive"
-				else:
-					if tracked_node not in self.listed_nodes:
-						if tracked_node in self.seen_nodes:
-							self.tracked_nodes.remove(tracked_node) 
-							rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
-							statusMsg.level = 0 # 2. Node has been cleanly removed 
-							statusMsg.message = "cleanly removed"
-						else:
-							statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
-							statusMsg.message = "did not start"
-					else:
-						statusMsg.level = 2 # 4. Node crashed --> Status ERROR
-						statusMsg.message = "is dead"
-
-				diagnosticArray.status.append(statusMsg)
-
-			# Publish diagnostic array
 			self.pub.publish(diagnosticArray)
 
-			rospy.sleep(5)
-
-			seq+=1
+			rospy.sleep(5)	
 
 # Main function.
 if __name__ == '__main__':
