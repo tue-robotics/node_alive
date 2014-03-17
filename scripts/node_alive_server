@@ -12,12 +12,18 @@ import fnmatch
 
 class NodeAliveServer():
 
-	nodes = []
-	seen_nodes = []
-	neglect_nodes = []
+	tracked_nodes 	= [] # these nodes will end up in the report
+	seen_nodes 		= [] # all nodes that have been observed
+	alive_nodes 	= [] # nodes that have been just been pinged and returned
+	listed_nodes 	= [] # nodes that are listed by the ros master (also contains crashed nodes)
+	
+	# fn matches of all nodes that need to be neglected
+	neglect_nodes = []	
 
-	re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
+	# /dev/null
 	NULL = open(os.devnull, 'w')
+	
+	re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
 	def __init__(self):
 		try:
@@ -28,16 +34,26 @@ class NodeAliveServer():
 		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
 		self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
 
-	def neglectNode(self, node_name):
+	def isNeglectedNode(self, node_name):
 		for neglect_node in self.neglect_nodes:
 			if fnmatch.fnmatch(node_name,neglect_node):
 				return True
 		return False
 
 	def callback(self, data):
-		if data.data not in self.nodes and not self.neglectNode(data.data):
+		if data.data not in self.tracked_nodes and not self.isNeglectedNode(data.data):
 			rospy.loginfo("Added '%s' to node_alive_server"%data.data)
-			self.nodes.append(data.data)
+			self.tracked_nodes.append(data.data)
+
+	def update_nodes(self):
+		self.alive_nodes = []
+
+		response = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
+		self.ping_nodes = self.re_ping_node.findall(response.stdout.read())
+
+		for alive_node in self.ping_nodes:
+			self.alive_nodes.append(alive_node)
+
 
 	def loop(self):
 
@@ -50,35 +66,29 @@ class NodeAliveServer():
 
 			self.listed_nodes = rosnode.get_node_names()
 			for listed_node in self.listed_nodes:
-				if listed_node not in self.nodes and not self.neglectNode(listed_node):
+				if listed_node not in self.tracked_nodes and not self.isNeglectedNode(listed_node):
 					rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
-					self.nodes.append(listed_node)
+					self.tracked_nodes.append(listed_node)
 				if listed_node not in self.seen_nodes:
 					self.seen_nodes.append(listed_node)
 			
-			self.alive_nodes = []
+			self.update_nodes()
 
-			response = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
-			self.ping_nodes = self.re_ping_node.findall(response.stdout.read())
-
-			for alive_node in self.ping_nodes:
-				self.alive_nodes.append(alive_node)
-
-			for node in self.nodes:
+			for tracked_node in self.tracked_nodes:
 
 				# Create diagnostic mesasge
 				statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
-				statusMsg.name = "node_alive%s"%node
+				statusMsg.name = "node_alive%s" % tracked_node
 
 				# Determine node status
-				if node in self.alive_nodes:
+				if tracked_node in self.alive_nodes:
 					statusMsg.level = 0 # 1. Node is alive --> Status OK
 					statusMsg.message = "is alive"
 				else:
-					if node not in self.listed_nodes:
-						if node in self.seen_nodes:
-							self.nodes.remove(node) 
-							rospy.loginfo("Removed '%s' from node_alive_server"%node)
+					if tracked_node not in self.listed_nodes:
+						if tracked_node in self.seen_nodes:
+							self.tracked_nodes.remove(tracked_node) 
+							rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
 							statusMsg.level = 0 # 2. Node has been cleanly removed 
 							statusMsg.message = "cleanly removed"
 						else:
