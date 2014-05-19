@@ -17,13 +17,13 @@ class NodeAliveServer():
 	seen_nodes 		= [] # all nodes that have been observed
 	alive_nodes 	= [] # nodes that have been just been pinged and returned
 	listed_nodes 	= [] # nodes that are listed by the ros master (also contains crashed nodes)
-	
+
 	# fn matches of all nodes that need to be neglected
-	neglect_nodes = []	
+	neglect_nodes = []
 
 	# /dev/null
 	NULL = open(os.devnull, 'w')
-	
+
 	re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
 	def __init__(self):
@@ -83,7 +83,7 @@ class NodeAliveServer():
 		for tracked_node in self.tracked_nodes:
 
 			# Create diagnostic mesasge
-			statusMsg = diagnostic_msgs.msg.DiagnosticStatus() 
+			statusMsg = diagnostic_msgs.msg.DiagnosticStatus()
 			statusMsg.name = "node_alive%s" % tracked_node
 
 			# Determine node status
@@ -93,9 +93,9 @@ class NodeAliveServer():
 			else:
 				if tracked_node not in self.listed_nodes:
 					if tracked_node in self.seen_nodes:
-						self.tracked_nodes.remove(tracked_node) 
+						self.tracked_nodes.remove(tracked_node)
 						rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
-						statusMsg.level = 0 # 2. Node has been cleanly removed 
+						statusMsg.level = 0 # 2. Node has been cleanly removed
 						statusMsg.message = "cleanly removed"
 					else:
 						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
@@ -115,18 +115,19 @@ class NodeAliveServer():
 		while not rospy.is_shutdown():
 
 			self.update_nodes()
-			
+
 			diagnosticArray = self.generate_diagnostic_array()
 			diagnosticArray.header.seq = seq
 			seq += 1
 
 			self.pub.publish(diagnosticArray)
 
-			rospy.sleep(5)	
+			rospy.sleep(5)
 
-# Main function.
+# Main function
 if __name__ == '__main__':
-	rospy.init_node('node_alive_server')
-
-	server = NodeAliveServer()
-	server.loop()
+    try:
+		rospy.init_node('node_alive_server')
+		server = NodeAliveServer()
+		server.loop()
+    except rospy.ROSInterruptException: pass
