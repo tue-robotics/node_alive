@@ -48,7 +48,7 @@ class NodeAliveServer():
 			self.tracked_nodes.append(data.data)
 
 	def service_callback(self, req):
-		rospy.loginfo("get_alive_nodes call")
+		rospy.logdebug("get_alive_nodes call")
 
 		return node_alive.srv.ListNodesAliveResponse(
 			tracked_nodes	= len(self.tracked_nodes),
