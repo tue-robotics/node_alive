@@ -1,7 +1,21 @@
-cmake_minimum_required(VERSION 2.4.6)
-include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
+cmake_minimum_required(VERSION 2.8.3)
+project(node_alive)
 
-rosbuild_init()
+## Find catkin macros and libraries
+find_package(catkin REQUIRED COMPONENTS
+  diagnostic_msgs
+  rospy
+  message_generation
+)
 
-#rosbuild_genmsg()
-rosbuild_gensrv()
+# Generate services in the 'srv' folder
+add_service_files(
+   FILES
+   ListNodesAlive.srv
+)
+
+# Generate added messages and services with any dependencies listed here
+generate_messages(
+   DEPENDENCIES
+   std_msgs
+)
