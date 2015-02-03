@@ -32,7 +32,7 @@ class NodeAliveServer():
 		except:
 			self.neglect_nodes = []
 
-		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray)
+		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray, queue_size=10)
 		self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
 		self.srv = rospy.Service('get_alive_nodes', node_alive.srv.ListNodesAlive, self.service_callback)
 
