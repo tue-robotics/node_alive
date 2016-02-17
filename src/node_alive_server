@@ -13,121 +13,127 @@ import fnmatch
 
 class NodeAliveServer():
 
-	tracked_nodes 	= [] # these nodes will end up in the report
-	seen_nodes 		= [] # all nodes that have been observed
-	alive_nodes 	= [] # nodes that have been just been pinged and returned
-	listed_nodes 	= [] # nodes that are listed by the ros master (also contains crashed nodes)
+    tracked_nodes   = [] # these nodes will end up in the report
+    seen_nodes      = [] # all nodes that have been observed
+    alive_nodes     = [] # nodes that have been just been pinged and returned
+    listed_nodes    = [] # nodes that are listed by the ros master (also contains crashed nodes)
 
-	# fn matches of all nodes that need to be neglected
-	neglect_nodes = []
+    # fn matches of all nodes that need to be neglected
+    neglect_nodes = []
 
-	# /dev/null
-	NULL = open(os.devnull, 'w')
+    # /dev/null
+    NULL = open(os.devnull, 'w')
 
-	re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
+    re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
-	def __init__(self):
-		try:
-			self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
-		except:
-			self.neglect_nodes = []
+    def __init__(self):
+        try:
+            self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
+        except:
+            self.neglect_nodes = []
 
-		self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray, queue_size=10)
-		self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
-		self.srv = rospy.Service('get_alive_nodes', node_alive.srv.ListNodesAlive, self.service_callback)
+        self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray, queue_size=10)
+        self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
+        self.srv = rospy.Service('get_alive_nodes', node_alive.srv.ListNodesAlive, self.service_callback)
 
-	def isNeglectedNode(self, node_name):
-		for neglect_node in self.neglect_nodes:
-			if fnmatch.fnmatch(node_name,neglect_node):
-				return True
-		return False
+    def isNeglectedNode(self, node_name):
+        for neglect_node in self.neglect_nodes:
+            if fnmatch.fnmatch(node_name,neglect_node):
+                return True
+        return False
 
-	def callback(self, data):
-		if data.data not in self.tracked_nodes and not self.isNeglectedNode(data.data):
-			rospy.loginfo("Added '%s' to node_alive_server"%data.data)
-			self.tracked_nodes.append(data.data)
+    def callback(self, data):
+        if data.data not in self.tracked_nodes and not self.isNeglectedNode(data.data):
+            rospy.loginfo("Added '%s' to node_alive_server"%data.data)
+            self.tracked_nodes.append(data.data)
 
-	def service_callback(self, req):
-		rospy.logdebug("get_alive_nodes call")
+    def service_callback(self, req):
+        rospy.logdebug("get_alive_nodes call")
 
-		return node_alive.srv.ListNodesAliveResponse(
-			tracked_nodes	= len(self.tracked_nodes),
-			seen_nodes		= len(self.seen_nodes),
-			alive_nodes 	= len(self.alive_nodes),
-			listed_nodes 	= len(self.listed_nodes),
-		)
+        return node_alive.srv.ListNodesAliveResponse(
+            tracked_nodes   = len(self.tracked_nodes),
+            seen_nodes      = len(self.seen_nodes),
+            alive_nodes     = len(self.alive_nodes),
+            listed_nodes    = len(self.listed_nodes),
+        )
 
-	def update_nodes(self):
-		# first update the listed nodes by the ros master
-		self.listed_nodes = rosnode.get_node_names()
-		for listed_node in self.listed_nodes:
-			if listed_node not in self.tracked_nodes and not self.isNeglectedNode(listed_node):
-				rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
-				self.tracked_nodes.append(listed_node)
-			if listed_node not in self.seen_nodes:
-				self.seen_nodes.append(listed_node)
+    def update_nodes(self):
+        # first update the listed nodes by the ros master
+        self.listed_nodes = rosnode.get_node_names()
+        for listed_node in self.listed_nodes:
+            if listed_node not in self.tracked_nodes and not self.isNeglectedNode(listed_node):
+                rospy.loginfo("Added '%s' to node_alive_server"%listed_node)
+                self.tracked_nodes.append(listed_node)
+            if listed_node not in self.seen_nodes:
+                self.seen_nodes.append(listed_node)
 
-		# then ping all nodes and check if they're online
-		self.alive_nodes = []
+        # then ping all nodes and check if they're online
+        self.alive_nodes = []
 
-		response = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
-		ping_nodes = self.re_ping_node.findall(response.stdout.read())
+        try:
+            process = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
+        except KeyboardInterrupt:
+            return
 
-		for alive_node in ping_nodes:
-			self.alive_nodes.append(alive_node)
+        out, err = process.communicate()
+        
+        ping_nodes = self.re_ping_node.findall(out)
 
-	def generate_diagnostic_array(self):
-		diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
-		diagnosticArray.header.stamp = rospy.get_rostime()
+        for alive_node in ping_nodes:
+            self.alive_nodes.append(alive_node)
 
-		for tracked_node in self.tracked_nodes:
+    def generate_diagnostic_array(self):
+        diagnosticArray = diagnostic_msgs.msg.DiagnosticArray()
+        diagnosticArray.header.stamp = rospy.get_rostime()
 
-			# Create diagnostic mesasge
-			statusMsg = diagnostic_msgs.msg.DiagnosticStatus()
-			statusMsg.name = "node_alive%s" % tracked_node
+        for tracked_node in self.tracked_nodes:
 
-			# Determine node status
-			if tracked_node in self.alive_nodes:
-				statusMsg.level = 0 # 1. Node is alive --> Status OK
-				statusMsg.message = "is alive"
-			else:
-				if tracked_node not in self.listed_nodes:
-					if tracked_node in self.seen_nodes:
-						self.tracked_nodes.remove(tracked_node)
-						rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
-						statusMsg.level = 0 # 2. Node has been cleanly removed
-						statusMsg.message = "cleanly removed"
-					else:
-						statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
-						statusMsg.message = "did not start"
-				else:
-					statusMsg.level = 2 # 4. Node crashed --> Status ERROR
-					statusMsg.message = "is dead"
+            # Create diagnostic mesasge
+            statusMsg = diagnostic_msgs.msg.DiagnosticStatus()
+            statusMsg.name = "node_alive%s" % tracked_node
 
-			diagnosticArray.status.append(statusMsg)
+            # Determine node status
+            if tracked_node in self.alive_nodes:
+                statusMsg.level = 0 # 1. Node is alive --> Status OK
+                statusMsg.message = "is alive"
+            else:
+                if tracked_node not in self.listed_nodes:
+                    if tracked_node in self.seen_nodes:
+                        self.tracked_nodes.remove(tracked_node)
+                        rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
+                        statusMsg.level = 0 # 2. Node has been cleanly removed
+                        statusMsg.message = "cleanly removed"
+                    else:
+                        statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
+                        statusMsg.message = "did not start"
+                else:
+                    statusMsg.level = 2 # 4. Node crashed --> Status ERROR
+                    statusMsg.message = "is dead"
 
-		return diagnosticArray
+            diagnosticArray.status.append(statusMsg)
 
-	def loop(self):
+        return diagnosticArray
 
-		seq = 1
+    def loop(self):
 
-		while not rospy.is_shutdown():
+        seq = 1
 
-			self.update_nodes()
+        while not rospy.is_shutdown():
 
-			diagnosticArray = self.generate_diagnostic_array()
-			diagnosticArray.header.seq = seq
-			seq += 1
+            self.update_nodes()
 
-			self.pub.publish(diagnosticArray)
+            diagnosticArray = self.generate_diagnostic_array()
+            diagnosticArray.header.seq = seq
+            seq += 1
 
-			rospy.sleep(5)
+            self.pub.publish(diagnosticArray)
+
+            rospy.sleep(5)
 
 # Main function
 if __name__ == '__main__':
     try:
-		rospy.init_node('node_alive_server')
-		server = NodeAliveServer()
-		server.loop()
+        rospy.init_node('node_alive_server')
+        server = NodeAliveServer()
+        server.loop()
     except rospy.ROSInterruptException: pass
