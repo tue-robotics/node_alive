@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<launch>
+	<node name="auto_starter" type="launch_controller" pkg="node_alive" />
+</launch>
