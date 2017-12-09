@@ -1,0 +1,12 @@
+uint8 START=1
+uint8 STOP=2
+uint8 RESTART=3
+
+int32 command  # One of the commands listed above
+string filename  # Filename of the file to launch
+---
+int8 FILE_NOT_PRESENT=-2
+int8 LAUNCH_ERROR=-1
+int8 SUCCEEDED=1
+
+int32 result  # One of the three result codes defined above
