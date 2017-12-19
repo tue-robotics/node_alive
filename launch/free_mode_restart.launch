@@ -1,4 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-	<node name="auto_starter" type="launch_controller" pkg="node_alive" />
+	<node name="auto_starter" type="launch_controller" pkg="node_alive">
+	    <rosparam command="load" file="$(env ROBOT_BRINGUP_PATH)/parameters/interaction/launch_files_list.yaml" />
+	</node>
 </launch>
