@@ -18,19 +18,50 @@ class AutoStarter(object):
 
     def __init__(self):
         """
-        Creates a service over which the command will be received, next amigo free mode is started and keeps running
-        until it gets a command to either shutdown or to restart or start another launch file.
+        Loads the launch files that can be started from the parameter server.
+        Creates a service over which the command will be received, a publisher that publishes the current launch file.
+        Set some variables to none.
         """
-        self.launch = None
+
         self.launch_files_list = rospy.get_param('~launch_files_list')
-        self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._handle_auto_starter_command)
+        # self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._handle_auto_starter_command)
+        self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand,
+                                              self._srv_callback)
         self._status_pub = rospy.Publisher('current_launch_file', String, queue_size=1, latch=True)
 
-        self.stop()
-        self.start('amigo_bringup', os.path.join("launch", "state_machines", "free_mode.launch"))
-        rospy.spin()
-        self.launch.shutdown()
-        #rospy.is_shutdown()
+        # self.start('amigo_bringup', os.path.join("launch", "state_machines", "free_mode.launch"))
+        # rospy.spin()
+        # self.launch.shutdown()
+        self.launch = None
+        self._pending_req = None
+        self._pending_resp = None
+
+
+    def update(self):
+        """
+        If there is a request of the service that was pending, it will be executed in the main thread when sleep is over
+        After executing the request, the pending status will be reset.
+        :return:
+        """
+        if self._pending_req is not None:
+            self._pending_resp = self._handle_auto_starter_command(self._pending_req)
+            self._pending_req = None
+
+    def _srv_callback(self, req):
+        """
+        Recieves the request from the service and sets it to pending.
+        :param req: the command request that the service receives from the client contains two data types.
+        :return:
+        """
+        self._pending_resp = None
+        self._pending_req = req
+        rate = rospy.Rate(10.0)
+        while self._pending_resp is None and not rospy.is_shutdown():
+            rate.sleep()
+        response = self._pending_resp
+        self._pending_resp = None
+        rospy.loginfo(response)
+        return response
 
     def _handle_auto_starter_command(self, req):
         """
@@ -42,13 +73,17 @@ class AutoStarter(object):
 
         if req.filename in self.launch_files_list:
             if req.command == AutoStarterCommandRequest.START:
-                self.stop()
                 self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
                 rospy.loginfo("Performed new start")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             elif req.command == AutoStarterCommandRequest.STOP:
                 self.stop()
                 rospy.loginfo("Performed shutdown")
+                return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
+            elif req.command == AutoStarterCommandRequest.RESTART:
+                self.stop()
+                self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                rospy.loginfo("Performed restart")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             else:
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.LAUNCH_ERROR)
@@ -80,7 +115,7 @@ class AutoStarter(object):
         if self.launch is not None:
             self.launch.shutdown()
         else:
-            print("No LaunchParent")
+            rospy.logwarn("No LaunchParent")
 
     def update_current_launch_file(self, package, path):
         """
@@ -91,6 +126,3 @@ class AutoStarter(object):
         full_path = os.path.join(package, path)
         rospy.loginfo("The following launch file is running: %s", full_path)
         self._status_pub.publish(full_path)
-
-
-

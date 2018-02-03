@@ -1,5 +1,6 @@
 uint8 START=1
-uint8 STOP=2
+uint8 RESTART=2
+uint8 STOP=3
 
 int32 command  # One of the commands listed above
 string filename  # Filename of the file to launch
