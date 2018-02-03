@@ -12,6 +12,7 @@ from node_alive.srv import AutoStarterCommand, AutoStarterCommandRequest, AutoSt
 class AutoStarter(object):
     """
     Launches amigo_free_mode and waits for a command to either shutdown or to restart.
+    It is also possible to start other launch files that are stored on the parameter server, like the demo's.
     """
     launch_files_list = []
 
@@ -20,12 +21,16 @@ class AutoStarter(object):
         Creates a service over which the command will be received, next amigo free mode is started and keeps running
         until it gets a command to either shutdown or to restart or start another launch file.
         """
+        self.launch = None
         self.launch_files_list = rospy.get_param('~launch_files_list')
         self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._handle_auto_starter_command)
         self._status_pub = rospy.Publisher('current_launch_file', String, queue_size=1, latch=True)
+
+        self.stop()
         self.start('amigo_bringup', os.path.join("launch", "state_machines", "free_mode.launch"))
         rospy.spin()
         self.launch.shutdown()
+        #rospy.is_shutdown()
 
     def _handle_auto_starter_command(self, req):
         """
@@ -36,18 +41,17 @@ class AutoStarter(object):
         """
 
         if req.filename in self.launch_files_list:
-            if req.command == AutoStarterCommandRequest.START :
+            if req.command == AutoStarterCommandRequest.START:
+                self.stop()
                 self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                rospy.loginfo("Performed new start")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             elif req.command == AutoStarterCommandRequest.STOP:
                 self.stop()
                 rospy.loginfo("Performed shutdown")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
-            elif req.command == AutoStarterCommandRequest.RESTART:
-                self.stop()
-                self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
-                rospy.loginfo("Performed restart")
-                return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
+            else:
+                return AutoStarterCommandResponse(AutoStarterCommandResponse.LAUNCH_ERROR)
         else:
             return AutoStarterCommandResponse(AutoStarterCommandResponse.FILE_NOT_PRESENT)
 
@@ -71,9 +75,12 @@ class AutoStarter(object):
 
     def stop(self):
         """
-        Shuts the launch file down.
+        Shuts the launch file down, this is only possible when there is a launch file running.
         """
-        self.launch.shutdown()
+        if self.launch is not None:
+            self.launch.shutdown()
+        else:
+            print("No LaunchParent")
 
     def update_current_launch_file(self, package, path):
         """
