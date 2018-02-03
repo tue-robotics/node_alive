@@ -8,10 +8,9 @@ from std_msgs.msg import String
 # TU/e Robotics
 from node_alive.srv import AutoStarterCommand, AutoStarterCommandRequest, AutoStarterCommandResponse
 
-
 class AutoStarter(object):
     """
-    Launches amigo_free_mode and waits for a command to either shutdown or to restart.
+    Launches a launch file and waits for a command to either shutdown or to restart.
     It is also possible to start other launch files that are stored on the parameter server, like the demo's.
     """
     launch_files_list = []
@@ -20,22 +19,15 @@ class AutoStarter(object):
         """
         Loads the launch files that can be started from the parameter server.
         Creates a service over which the command will be received, a publisher that publishes the current launch file.
-        Set some variables to none.
+        Set some variables.
         """
-
         self.launch_files_list = rospy.get_param('~launch_files_list')
-        # self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._handle_auto_starter_command)
-        self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand,
-                                              self._srv_callback)
+        self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._srv_callback)
         self._status_pub = rospy.Publisher('current_launch_file', String, queue_size=1, latch=True)
 
-        # self.start('amigo_bringup', os.path.join("launch", "state_machines", "free_mode.launch"))
-        # rospy.spin()
-        # self.launch.shutdown()
         self.launch = None
         self._pending_req = None
         self._pending_resp = None
-
 
     def update(self):
         """
@@ -49,7 +41,8 @@ class AutoStarter(object):
 
     def _srv_callback(self, req):
         """
-        Recieves the request from the service and sets it to pending.
+        Recieves the request from the service and sets it to pending. As long as there is no response, the function
+        will sleep till it gets one. After that the response will reset.
         :param req: the command request that the service receives from the client contains two data types.
         :return:
         """
@@ -60,7 +53,6 @@ class AutoStarter(object):
             rate.sleep()
         response = self._pending_resp
         self._pending_resp = None
-        rospy.loginfo(response)
         return response
 
     def _handle_auto_starter_command(self, req):
@@ -68,9 +60,8 @@ class AutoStarter(object):
         All request from the service are passed into this function and depending on the value it will either shutdown,
         restart the launch file or start another launch file.
         :param req: the command request that the service receives from the client contains two data types.
-        :return: returns the integer 1  when function finishes successful or -2 when no or incorrect file is given.
+        :return: returns the integer 1  when function finishes successful or -1 or -2 when no or incorrect file is given.
         """
-
         if req.filename in self.launch_files_list:
             if req.command == AutoStarterCommandRequest.START:
                 self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
@@ -92,7 +83,7 @@ class AutoStarter(object):
 
     def start(self, package, path):
         """
-        Finds the right directory of the launch file of free mode and launches the file.
+        Finds the right directory of the launch file and launches the file.
         :param package: package of the current launch file
         :param path: path to the current launch file
         """
@@ -115,7 +106,7 @@ class AutoStarter(object):
         if self.launch is not None:
             self.launch.shutdown()
         else:
-            rospy.logwarn("No LaunchParent")
+            rospy.logwarn("No LaunchParent, No launch file to shut down")
 
     def update_current_launch_file(self, package, path):
         """
