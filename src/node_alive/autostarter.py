@@ -51,9 +51,7 @@ class AutoStarter(object):
         rate = rospy.Rate(10.0)
         while self._pending_resp is None and not rospy.is_shutdown():
             rate.sleep()
-        response = self._pending_resp
-        self._pending_resp = None
-        return response
+        return self._pending_resp
 
     def _handle_auto_starter_command(self, req):
         """
@@ -62,19 +60,21 @@ class AutoStarter(object):
         :param req: the command request that the service receives from the client contains two data types.
         :return: returns the integer 1  when function finishes successful or -1 or -2 when no or incorrect file is given.
         """
+
         if req.filename in self.launch_files_list:
             if req.command == AutoStarterCommandRequest.START:
-                self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
-                rospy.loginfo("Performed new start")
-                return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
+                if self.launch is None:
+                    self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                    rospy.loginfo("Performed new start")
+                    return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
+                else:
+                    self.stop()
+                    self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                    rospy.loginfo("Performed restart")
+                    return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             elif req.command == AutoStarterCommandRequest.STOP:
                 self.stop()
                 rospy.loginfo("Performed shutdown")
-                return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
-            elif req.command == AutoStarterCommandRequest.RESTART:
-                self.stop()
-                self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
-                rospy.loginfo("Performed restart")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             else:
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.LAUNCH_ERROR)
