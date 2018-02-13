@@ -1,5 +1,7 @@
-# ROS
+# System
 import os
+
+# ROS
 import roslaunch
 import rospkg
 import rospy
@@ -8,26 +10,27 @@ from std_msgs.msg import String
 # TU/e Robotics
 from node_alive.srv import AutoStarterCommand, AutoStarterCommandRequest, AutoStarterCommandResponse
 
+
 class AutoStarter(object):
     """
-    Launches a launch file and waits for a command to either shutdown or to restart.
-    It is also possible to start other launch files that are stored on the parameter server, like the demo's.
+    Waits for an input from the service to start up a launch file, after this it can restart the same file, start
+    another new launch file or stop the current launch file. The list of possible launch files and the package name are
+    available on the parameter server.
     """
-    launch_files_list = []
 
     def __init__(self):
         """
-        Loads the launch files that can be started from the parameter server.
-        Creates a service over which the command will be received, a publisher that publishes the current launch file.
-        Set some variables.
+        Gets the list of launch files and the package name from the parameter server
+        Creates a service over which the command will be received and a publisher that publishes the current launch file.
         """
-        self.launch_files_list = rospy.get_param('~launch_files_list')
+        self._bringup_package_path = rospy.get_param('~package_name')
+        self._launch_files_list = rospy.get_param('~launch_files_list')
         self._command_service = rospy.Service('auto_starter_command', AutoStarterCommand, self._srv_callback)
         self._status_pub = rospy.Publisher('current_launch_file', String, queue_size=1, latch=True)
 
-        self.launch = None
-        self._pending_req = None
-        self._pending_resp = None
+        self._launch = None             # Stores the launch file location
+        self._pending_req = None        # Stores the input from the service
+        self._pending_resp = None       # Stores the response from the function _handle_auto_starter_command
 
     def update(self):
         """
@@ -43,33 +46,36 @@ class AutoStarter(object):
         """
         Recieves the request from the service and sets it to pending. As long as there is no response, the function
         will sleep till it gets one. After that the response will reset.
-        :param req: the command request that the service receives from the client contains two data types.
-        :return:
+        :param req: (AutoStarterCommandResponse) the command request that the service receives from the client contains
+        two data types, which launch file and which command.
+        :return response:
         """
         self._pending_resp = None
         self._pending_req = req
         rate = rospy.Rate(10.0)
         while self._pending_resp is None and not rospy.is_shutdown():
             rate.sleep()
-        return self._pending_resp
+        response = self._pending_resp
+        self._pending_resp = None
+        return response
 
     def _handle_auto_starter_command(self, req):
         """
         All request from the service are passed into this function and depending on the value it will either shutdown,
         restart the launch file or start another launch file.
-        :param req: the command request that the service receives from the client contains two data types.
-        :return: returns the integer 1  when function finishes successful or -1 or -2 when no or incorrect file is given.
+        :param req: (AutoStarterCommandResponse) the command request that the service receives from the client contains
+        two data types, which launch file and which command.
+        :return AutoStarterCommandResponse:
         """
-
-        if req.filename in self.launch_files_list:
+        if req.filename in self._launch_files_list:
             if req.command == AutoStarterCommandRequest.START:
-                if self.launch is None:
-                    self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                if self._launch is None:
+                    self.start(self._bringup_package_path , os.path.join("launch", "state_machines", req.filename))
                     rospy.loginfo("Performed new start")
                     return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
                 else:
                     self.stop()
-                    self.start('amigo_bringup', os.path.join("launch", "state_machines", req.filename))
+                    self.start( self._bringup_package_path, os.path.join("launch", "state_machines", req.filename))
                     rospy.loginfo("Performed restart")
                     return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             elif req.command == AutoStarterCommandRequest.STOP:
@@ -93,22 +99,21 @@ class AutoStarter(object):
         # Get in the right directory
         rospack = rospkg.RosPack()
 
-        self.launch = roslaunch.parent.ROSLaunchParent(uuid, [
+        self._launch = roslaunch.parent.ROSLaunchParent(uuid, [
             os.path.join(rospack.get_path(package), path)])
-        self.launch.start()
-
-        self.update_current_launch_file(package, path)
+        self._launch.start()
+        self._update_current_launch_file(package, path)
 
     def stop(self):
         """
         Shuts the launch file down, this is only possible when there is a launch file running.
         """
-        if self.launch is not None:
-            self.launch.shutdown()
+        if self._launch is not None:
+            self._launch.shutdown()
         else:
             rospy.logwarn("No LaunchParent, No launch file to shut down")
 
-    def update_current_launch_file(self, package, path):
+    def _update_current_launch_file(self, package, path):
         """
         Publishes the current launch file
         :param package: package of the current launch file
