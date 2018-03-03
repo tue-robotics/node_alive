@@ -5,6 +5,7 @@ import os
 import roslaunch
 import rospkg
 import rospy
+import rosnode
 from std_msgs.msg import String
 
 # TU/e Robotics
@@ -50,18 +51,30 @@ class AutoStarter(object):
         two data types, which launch file and which command.
         :return response:
         """
+        self._time_out = 10.0
         self._pending_resp = None
         self._pending_req = req
         rate = rospy.Rate(10.0)
+        t_end = rospy.Time.now() + rospy.Duration(self._time_out)
+
         while self._pending_resp is None and not rospy.is_shutdown():
             rate.sleep()
+            # if there is no response after getting a request. It will set the request to None again and waits for new
+            # new request from service.
+            if rospy.Time.now() > t_end:
+                self._pending_req = None
+                self._pending_resp = AutoStarterCommandResponse(AutoStarterCommandResponse.LAUNCH_ERROR)
+                rospy.logwarn("No response after getting request. No launch files launched. "
+                              "Request is set to None and waits for new request from service")
+                break
+
         response = self._pending_resp
         self._pending_resp = None
         return response
 
     def _handle_auto_starter_command(self, req):
         """
-        All request from the service are passed into this function and depending on the value it will either shutdown,
+        All request from the service are passed into this function and depending on the values it will either shutdown,
         restart the launch file or start another launch file.
         :param req: (AutoStarterCommandResponse) the command request that the service receives from the client contains
         two data types, which launch file and which command.
@@ -79,6 +92,7 @@ class AutoStarter(object):
                     rospy.loginfo("Performed restart")
                     return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
             elif req.command == AutoStarterCommandRequest.STOP:
+                rospy.loginfo("Performing shutdown")
                 self.stop()
                 rospy.loginfo("Performed shutdown")
                 return AutoStarterCommandResponse(AutoStarterCommandResponse.SUCCEEDED)
@@ -89,10 +103,14 @@ class AutoStarter(object):
 
     def start(self, package, path):
         """
-        Finds the right directory of the launch file and launches the file.
+        Before a launche file is started, it kills the node state_machine to make sure that all running launch files
+        are closed. Then it finds the right directory of the launch file and launches the file.
         :param package: package of the current launch file
         :param path: path to the current launch file
         """
+        rosnode.kill_nodes(['/state_machine'])
+        rospy.sleep(0.1)
+
         uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(uuid)
 
