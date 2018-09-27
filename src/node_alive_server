@@ -10,6 +10,14 @@ import subprocess as sub
 import os
 import re
 import fnmatch
+from enum import Enum
+
+# Enum for representing the node state with a descriptive name
+class NodeState(Enum):
+    Alive = "0"
+    Removed = "1"
+    NotStarted = "2"
+    Dead = "3"
 
 class NodeAliveServer():
 
@@ -96,6 +104,9 @@ class NodeAliveServer():
             if tracked_node in self.alive_nodes:
                 statusMsg.level = 0 # 1. Node is alive --> Status OK
                 statusMsg.message = "is alive"
+                statusMsg.values.append(
+                    diagnostic_msgs.msg.KeyValue("NodeState",NodeState.Alive.value)
+                )
             else:
                 if tracked_node not in self.listed_nodes:
                     if tracked_node in self.seen_nodes:
@@ -103,12 +114,21 @@ class NodeAliveServer():
                         rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
                         statusMsg.level = 0 # 2. Node has been cleanly removed
                         statusMsg.message = "cleanly removed"
+                        statusMsg.values.append(
+                            diagnostic_msgs.msg.KeyValue("NodeState",NodeState.Removed.value)
+                        )
                     else:
                         statusMsg.level = 2 # 3. Node did not start at all --> Status ERROR
                         statusMsg.message = "did not start"
+                        statusMsg.values.append(
+                            diagnostic_msgs.msg.KeyValue("NodeState",NodeState.NotStarted.value)
+                        )
                 else:
                     statusMsg.level = 2 # 4. Node crashed --> Status ERROR
                     statusMsg.message = "is dead"
+                    statusMsg.values.append(
+                        diagnostic_msgs.msg.KeyValue("NodeState",NodeState.Dead.value)
+                    )
 
             diagnosticArray.status.append(statusMsg)
 
