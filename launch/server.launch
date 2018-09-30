@@ -1,5 +1,7 @@
 <?xml version="1.0"?>
 <launch>
 	<rosparam command="load" file="$(find node_alive)/parameters/neglect_nodes.yaml" />
-	<node name="node_alive_server" type="node_alive_server" pkg="node_alive" />
+	<node name="node_alive_server" type="node_alive_server" pkg="node_alive" >
+		<param name="status_prefix" value="node_alive" />
+	</node>
 </launch>

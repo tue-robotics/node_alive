@@ -34,11 +34,14 @@ class NodeAliveServer():
 
     re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
+    status_prefix = ""
+
     def __init__(self):
         try:
             self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
         except:
             self.neglect_nodes = []
+        self.status_prefix = rospy.get_param('~status_prefix', 'node_alive')
 
         self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray, queue_size=10)
         self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
@@ -98,7 +101,7 @@ class NodeAliveServer():
 
             # Create diagnostic mesasge
             statusMsg = diagnostic_msgs.msg.DiagnosticStatus()
-            statusMsg.name = "node_alive%s" % tracked_node
+            statusMsg.name = self.status_prefix + tracked_node
 
             # Determine node status
             if tracked_node in self.alive_nodes:
