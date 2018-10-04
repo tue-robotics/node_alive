@@ -34,14 +34,13 @@ class NodeAliveServer():
 
     re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
-    status_prefix = ""
-
     def __init__(self):
         try:
             self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
         except:
             self.neglect_nodes = []
         self.status_prefix = rospy.get_param('~status_prefix', 'node_alive')
+        self.loop_rate_hz = rospy.get_param('~update_rate_hz', 0.2)
 
         self.pub = rospy.Publisher('diagnostics', diagnostic_msgs.msg.DiagnosticArray, queue_size=10)
         self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
@@ -140,7 +139,7 @@ class NodeAliveServer():
     def loop(self):
 
         seq = 1
-
+        rate = rospy.Rate(self.loop_rate_hz)
         while not rospy.is_shutdown():
 
             self.update_nodes()
@@ -151,7 +150,7 @@ class NodeAliveServer():
 
             self.pub.publish(diagnosticArray)
 
-            rospy.sleep(5)
+            rate.sleep()
 
 # Main function
 if __name__ == '__main__':

@@ -3,5 +3,6 @@
 	<rosparam command="load" file="$(find node_alive)/parameters/neglect_nodes.yaml" />
 	<node name="node_alive_server" type="node_alive_server" pkg="node_alive" >
 		<param name="status_prefix" value="node_alive" />
+		<param name="update_rate_hz" value="0.2" />
 	</node>
 </launch>
