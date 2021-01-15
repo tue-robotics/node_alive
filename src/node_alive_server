@@ -5,11 +5,10 @@ import rosnode
 import diagnostic_msgs.msg
 from std_msgs.msg import String
 import node_alive.srv
-import subprocess as sub
-import os
-import re
 import fnmatch
 from enum import Enum
+from rosnode import rosnode_ping_all
+
 
 class NodeState(Enum):
     """
@@ -29,11 +28,6 @@ class NodeAliveServer:
 
     # fn matches of all nodes that need to be neglected
     neglect_nodes = []
-
-    # /dev/null
-    NULL = open(os.devnull, 'w')
-
-    re_ping_node = re.compile('pinging ([^ ]+) with a timeout of \d+.\d+s\s*xmlrpc reply from')
 
     def __init__(self):
         try:
@@ -81,14 +75,7 @@ class NodeAliveServer:
         # then ping all nodes and check if they're online
         self.alive_nodes = []
 
-        try:
-            process = sub.Popen(['rosnode','ping','-a'],stderr=self.NULL,stdout=sub.PIPE)
-        except KeyboardInterrupt:
-            return
-
-        out, err = process.communicate()
-        
-        ping_nodes = self.re_ping_node.findall(out)
+        (ping_nodes, _) = rosnode_ping_all()
 
         for alive_node in ping_nodes:
             self.alive_nodes.append(alive_node)
