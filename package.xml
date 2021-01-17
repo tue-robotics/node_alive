@@ -20,6 +20,7 @@
   <depend>std_msgs</depend>
 
   <exec_depend>message_runtime</exec_depend>
+  <exec_depend condition="$ROS_PYTHON_VERSION == 2">python-enum34</exec_depend>
   <exec_depend>rospy</exec_depend>
 
 </package>
