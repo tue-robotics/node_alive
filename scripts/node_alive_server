@@ -32,7 +32,7 @@ class NodeAliveServer:
     def __init__(self):
         try:
             self.neglect_nodes = rospy.get_param('node_alive/neglect_nodes')
-        except Exception:
+        except KeyError:
             self.neglect_nodes = []
         self.status_prefix = rospy.get_param('~status_prefix', 'node_alive')
         self.loop_rate_hz = rospy.get_param('~update_rate_hz', 0.2)
