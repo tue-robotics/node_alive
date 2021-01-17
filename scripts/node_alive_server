@@ -14,10 +14,10 @@ class NodeState(Enum):
     """
     Enum for representing the node state with a descriptive name
     """
-    Alive = "0"
-    Removed = "1"
-    NotStarted = "2"
-    Dead = "3"
+    Alive = 0
+    Removed = 1
+    NotStarted = 2
+    Dead = 3
 
 
 class NodeAliveServer:
