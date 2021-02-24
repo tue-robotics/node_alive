@@ -128,12 +128,3 @@ class NodeAliveServer(object):
             self.pub.publish(diagnostic_array)
 
             rate.sleep()
-
-
-if __name__ == '__main__':
-    try:
-        rospy.init_node('node_alive_server')
-        server = NodeAliveServer()
-        server.loop()
-    except rospy.ROSInterruptException:
-        pass

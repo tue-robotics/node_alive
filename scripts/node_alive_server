@@ -1,0 +1,12 @@
+#! /usr/bin/env python
+
+import rospy
+from node_alive.server import NodeAliveServer
+
+if __name__ == '__main__':
+    try:
+        rospy.init_node('node_alive_server')
+        server = NodeAliveServer()
+        server.loop()
+    except rospy.ROSInterruptException:
+        pass
