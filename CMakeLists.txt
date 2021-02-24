@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(node_alive)
 
 ## Find catkin macros and libraries
@@ -6,6 +6,8 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   std_msgs
 )
+
+catkin_python_setup()
 
 # Generate services in the 'srv' folder
 add_service_files(
