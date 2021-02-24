@@ -1,10 +1,8 @@
-#!/usr/bin/env python
-
 import rospy
 import rosnode
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from std_msgs.msg import String
-import node_alive.srv
+from node_alive.srv import ListNodesAlive, ListNodesAliveResponse
 import fnmatch
 from enum import Enum
 from rosnode import rosnode_ping_all
@@ -20,7 +18,7 @@ class NodeState(Enum):
     Dead = 3
 
 
-class NodeAliveServer:
+class NodeAliveServer(object):
     tracked_nodes = []  # these nodes will end up in the report
     seen_nodes = []  # all nodes that have been observed
     alive_nodes = []  # nodes that have been just been pinged and returned
@@ -39,7 +37,7 @@ class NodeAliveServer:
 
         self.pub = rospy.Publisher('diagnostics', DiagnosticArray, queue_size=10)
         self.sub = rospy.Subscriber("check_alive_nodes", String, self.callback)
-        self.srv = rospy.Service('get_alive_nodes', node_alive.srv.ListNodesAlive, self.service_callback)
+        self.srv = rospy.Service('get_alive_nodes', ListNodesAlive, self.service_callback)
 
     def is_neglected_node(self, node_name):
         for neglect_node in self.neglect_nodes:
@@ -55,7 +53,7 @@ class NodeAliveServer:
     def service_callback(self, req):
         rospy.logdebug("get_alive_nodes call")
 
-        return node_alive.srv.ListNodesAliveResponse(
+        return ListNodesAliveResponse(
             tracked_nodes=len(self.tracked_nodes),
             seen_nodes=len(self.seen_nodes),
             alive_nodes=len(self.alive_nodes),
