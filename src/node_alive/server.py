@@ -92,7 +92,7 @@ class NodeAliveServer(object):
             if tracked_node in self.alive_nodes:
                 status_msg.level = DiagnosticStatus.OK  # 1. Node is alive --> Status OK
                 status_msg.message = "is alive"
-                status_msg.values.append(KeyValue("NodeState", NodeState.Alive.value))
+                status_msg.values.append(KeyValue("NodeState", NodeState.Alive.name))
             else:
                 if tracked_node not in self.listed_nodes:
                     if tracked_node in self.seen_nodes:
@@ -100,15 +100,15 @@ class NodeAliveServer(object):
                         rospy.loginfo("Removed '%s' from node_alive_server" % tracked_node)
                         status_msg.level = DiagnosticStatus.OK  # 2. Node has been cleanly removed
                         status_msg.message = "cleanly removed"
-                        status_msg.values.append(KeyValue("NodeState", NodeState.Removed.value))
+                        status_msg.values.append(KeyValue("NodeState", NodeState.Removed.name))
                     else:
                         status_msg.level = DiagnosticStatus.ERROR  # 3. Node did not start at all --> Status ERROR
                         status_msg.message = "did not start"
-                        status_msg.values.append(KeyValue("NodeState", NodeState.NotStarted.value))
+                        status_msg.values.append(KeyValue("NodeState", NodeState.NotStarted.name))
                 else:
                     status_msg.level = DiagnosticStatus.ERROR  # 4. Node crashed --> Status ERROR
                     status_msg.message = "is dead"
-                    status_msg.values.append(KeyValue("NodeState", NodeState.Dead.value))
+                    status_msg.values.append(KeyValue("NodeState", NodeState.Dead.name))
 
             diagnostic_array.status.append(status_msg)
 
